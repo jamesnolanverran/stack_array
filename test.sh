@@ -70,7 +70,7 @@ SRC_FILES=(
 )
 
 COMMON_CFLAGS=(
-    "-std=c11"
+    "-std=c99"
     "-Wall"
     "-Wextra"
     "-Wpedantic"

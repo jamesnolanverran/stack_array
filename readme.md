@@ -1,19 +1,42 @@
 # stack_array
 
-`stack_array` is a small C library for fixed-capacity arrays and strings that live on the stack.
+`stack_array` is a small C helper library for fixed-capacity arrays and strings that live on the stack.
 
 The goal is to remove some of the repetitive, error-prone parts of normal C code. Length and capacity are tracked for you, bounds are checked, and string helpers keep the buffer null-terminated.
 
 ## What it provides
 
 - fixed-capacity stack arrays with tracked length
-- fixed-capacity char arrays with tracked length
+- fixed-capacity stack strings with tracked length
 - checked push/pop/peek/index operations
 - checked append for arrays and strings
 - ss_appendf and ss_sprintf for strings
 - optional custom overflow / underflow handlers
 
 This is not a heap-backed dynamic array. Capacity is fixed at declaration time.
+
+## Why use it
+
+Stack_array:
+
+```c
+stack_string(build_path, 512); 
+ss_sprintf(build_path, "build/%s", rel_path);
+```
+
+Raw C:
+
+```c
+char build_path[512];
+int needed = snprintf(NULL, 0, "build/%s", rel_path);
+
+if (needed < 0 || (size_t)needed >= sizeof(build_path)) {
+    fprintf(stderr, "error msg\n");
+    abort();
+}
+snprintf(build_path, sizeof(build_path), "build/%s", rel_path)
+
+```
 
 ---
 ## Example: stack array of ints
@@ -79,6 +102,7 @@ void example(void) {
 void example(void) {
     stack_string(path, 64);
 
+    // formatted writes only modify the buffer if the full result fits
     ss_sprintf(path, "/tmp/%s_%d.txt", "log", 7);
 
     // path == "/tmp/log_7.txt"
@@ -269,6 +293,10 @@ For `sa_push`, the return value is a pointer to the inserted element on success,
     
 - This is a fixed-capacity container. It does not grow dynamically.
 
+## Requirements
+
+- C99 or later
+- Tested on MSVC, clang-cl, GCC, and Clang
 
 ## CMake
 

@@ -87,9 +87,7 @@ static int ss_vsprintf_impl(char *dst, const char *fmt, va_list args) {
         sa_overflow_abort(h->cap);
         return 0;
     }
-
-    size_t n = (size_t)needed;
-    if (n >= h->cap) {
+    if (((size_t)needed) >= h->cap) {
         sa_overflow_abort(h->cap);
         return 0;
     }

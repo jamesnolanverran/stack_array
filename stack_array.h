@@ -5,12 +5,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#if defined(__cplusplus)
-#define SA_STATIC_ASSERT(expr, msg) static_assert(expr, msg)
-#else
-#define SA_STATIC_ASSERT(expr, msg) _Static_assert(expr, msg)
-#endif
-
 typedef struct SA_Header {
     size_t cap;
     size_t len;
@@ -36,7 +30,6 @@ Stack array declaration
 */
 
 #define stack_array(name, T, N)                     \
-    SA_STATIC_ASSERT((N) > 0, "stack_array size must be greater than zero"); \
     struct {                                        \
         SA_Header hdr;                              \
         T data[N];                                  \
@@ -50,7 +43,6 @@ Struct field helpers
 */
 // inline fixed arrays
 #define sa_field(name, T, N)    \
-    SA_STATIC_ASSERT((N) > 0, "sa_field size must be greater than zero"); \
     SA_Header hdr_##name;       \
     T name[N]
 
