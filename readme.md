@@ -317,6 +317,32 @@ In other words, the user-facing value is just `T *`, but the length/capacity met
 
 This is convenient, but it is also why the helpers only work with arrays created by these macros.
 
+## CMake
+
+Build the library and run tests:
+
+```
+cmake -S . -B build  
+cmake --build build  
+ctest --test-dir build --output-on-failure
+```
+
+Use from another CMake project:
+
+```
+add_subdirectory(path/to/stack_array)  
+target_link_libraries(my_target PRIVATE stack_array)
+```
+
+If you want to install the library and header:
+
+```
+cmake -S . -B build  
+cmake --build build  
+cmake --install build --prefix ./install
+```
+
+
 ## License
 
 MIT License
