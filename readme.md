@@ -14,22 +14,9 @@ The goal is to remove some of the repetitive, error-prone parts of normal C code
 - optional custom overflow / underflow handlers
 
 This is not a heap-backed dynamic array. Capacity is fixed at declaration time.
-## Basic usage  
-  
-Include the header where you use the library:  
-  
-```c  
-#include "stack_array.h"
-```
-
-And compile `stack_array.c` along with your code.
 
 ---
 ## Example: stack array of ints
-
-Without a helper, a normal fixed array often means manually tracking count, checking bounds, and remembering the capacity in multiple places.
-
-With `stack_array`:
 
 ```c
 #include "stack_array.h"
@@ -41,8 +28,8 @@ void example(void) {
     sa_push(values, 20);
     sa_push(values, 30);
 
-    int top = sa_peek(values);   // 30
     int x   = sa_pop(values);    // 30
+    int top = sa_peek(values);   // 20
 
     // len/cap are tracked in the hidden header
     size_t len = sa_len(values); // 2
@@ -67,8 +54,6 @@ void example(void) {
 ```
 
 ## Example: stack string
-
-Instead of manually tracking the write position, remaining space, and where to place the trailing `'\0'`, you can do this:
 
 ```c
 #include "stack_array.h"
@@ -126,6 +111,11 @@ void example(void) {
 }
 ```
 The field lives inside the struct, and after initialization it can be used through a normal pointer.
+
+## How it works
+
+- [Unnamed Struct Types, Anonymous Members, and how `stack_array` Works](docs/unnamed_structs.md)
+- [Hidden Metadata in Front of an Array](docs/hidden_metadata.md)
 
 ## API summary
 
@@ -212,7 +202,7 @@ struct Label {
 
 void example(void) {
     struct Label label = {0};
-    ss_field_init(label.name);
+    ss_field_init(label.name); // sets capacity
 }
 ```
 ### 3. String capacity includes the trailing `'\0'`
@@ -277,48 +267,8 @@ For `sa_push`, the return value is a pointer to the inserted element on success,
     
 - Error handlers are intended to abort or otherwise not return.
     
-- This is a fixed-capacity stack container. It does not grow dynamically.
-    
+- This is a fixed-capacity container. It does not grow dynamically.
 
-## About the header trick
-
-The core trick is this macro:
-
-```c
-#define sa_hdr(arr) (((SA_Header *)(arr)) - 1)
-```
-
-When you declare:
-
-```c
-stack_array(values, int, 4);
-```
-
-the macro creates storage that looks like this:
-
-```c
-struct {
-    SA_Header hdr;
-    int data[4];
-} SA_values = { { 4, 0 }, { 0 } };
-
-int *values = SA_values.data;
-```
-
-So `values` points to `data[0]`, but the header lives immediately before it in memory.
-
-That means:
-
-- `sa_hdr(values)` steps back one `SA_Header`
-    
-- `sa_len(values)` reads `hdr.len`
-    
-- `sa_cap(values)` reads `hdr.cap`
-    
-
-In other words, the user-facing value is just `T *`, but the length/capacity metadata sits directly in front of the array data.
-
-This is convenient, but it is also why the helpers only work with arrays created by these macros.
 
 ## CMake
 

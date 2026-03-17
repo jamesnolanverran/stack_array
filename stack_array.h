@@ -1,4 +1,5 @@
-#pragma once
+#ifndef STACK_ARRAY_H
+#define STACK_ARRAY_H
 
 #include <stddef.h>
 #include <stdio.h>
@@ -170,4 +171,5 @@ sa_error_underflow_fn sa_set_underflow_handler(sa_error_underflow_fn handler);
 
 #ifdef __cplusplus
 }
+#endif
 #endif
