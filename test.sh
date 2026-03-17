@@ -5,7 +5,7 @@ set -euo pipefail
 usage() {
     cat <<EOF
 Usage:
-  ./build.sh [compiler]
+  ./test.sh [compiler]
 
 Compilers:
   cc
@@ -13,9 +13,9 @@ Compilers:
   gcc
 
 Examples:
-  ./build.sh
-  ./build.sh clang
-  ./build.sh gcc
+  ./test.sh
+  ./test.sh clang
+  ./test.sh gcc
 EOF
 }
 
@@ -62,6 +62,7 @@ CC="$(pick_compiler "$@")"
 
 OUT_DIR="build"
 OUT_BIN="$OUT_DIR/stack_array_tests"
+TMP_WORK_DIR="$OUT_DIR/tmp"
 SRC_FILES=(
     "stack_array.c"
     "tests/test_stack_array.c"
@@ -77,6 +78,10 @@ COMMON_CFLAGS=(
 )
 
 mkdir -p "$OUT_DIR"
+mkdir -p "$TMP_WORK_DIR"
+export TMPDIR="$TMP_WORK_DIR"
+export TMP="$TMP_WORK_DIR"
+export TEMP="$TMP_WORK_DIR"
 
 echo "[build] compiler: $CC"
 echo "[build] output:   $OUT_BIN"

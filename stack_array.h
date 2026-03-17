@@ -74,7 +74,8 @@ Core operations
     produced by the expression is unspecified and must not be relied on.
 */
 
-
+// Pushes val and returns a pointer to the inserted element.
+// Returns NULL only if the overflow handler returns.
 #define sa_push(arr, val)                                                 \
     (sa_len(arr) < sa_cap(arr)                                            \
         ? (((arr))[sa_len(arr)] = (val), &((arr))[sa_len(arr)++])         \
@@ -90,7 +91,7 @@ Core operations
         ? ((arr)[sa_len(arr) - 1])                                        \
         : (sa_underflow_abort(), (arr)[0]))
 
-//  sa_at() --> accessing out of bounds triggers overflow error
+//  sa_at() --> accessing out of bounds triggers overflow/bounds error
 #define sa_at(arr, i)                                                     \
     (((i) < sa_len(arr))                                                  \
         ? ((arr)[(i)])                                                    \
@@ -108,7 +109,7 @@ do {                                                                      \
     SA_Header *_h = sa_hdr(dst);                                          \
     size_t _n = (count);                                                  \
                                                                           \
-    if (_h->len + _n > _h->cap) {                                         \
+    if (_n > _h->cap - _h->len) {                                         \
         sa_overflow_abort(sa_cap(dst));                                   \
     }                                                                     \
     else {                                                                \
@@ -133,138 +134,21 @@ String stack arrays
 #define ss_len(str) sa_len(str)
 #define ss_cap(str) sa_cap(str)
 
-
-#define ss_clear(str)                                                 \
-do {                                                                  \
-    sa_clear(str);                                                    \
-    (str)[0] = '\0';                                                  \
-} while (0)
-
-
 /*
-===============================================================================
-String append (strlen based)
-===============================================================================
+    String helpers operate on stack_string / ss_field buffers only.
 */
-
-#define ss_append(dst, src)                                               \
-do {                                                                      \
-    SA_Header *_h = sa_hdr(dst);                                          \
-    size_t _n = strlen(src);                                              \
-                                                                          \
-    if (_h->len + _n + 1 > _h->cap) {                                     \
-        sa_overflow_abort(sa_cap(dst));                                   \
-    }                                                                     \
-    else {                                                                \
-        memcpy((dst) + _h->len, (src), _n);                               \
-        _h->len += _n;                                                    \
-        (dst)[_h->len] = '\0';                                            \
-    }                                                                     \
-} while (0)
-
-#define ss_append_n(dst, src, n)                                          \
-do {                                                                      \
-    SA_Header *_h = sa_hdr(dst);                                          \
-    size_t _n = (n);                                                      \
-                                                                          \
-    if (_h->len + _n + 1 > _h->cap) {                                     \
-        sa_overflow_abort(sa_cap(dst));                                   \
-    }                                                                     \
-    else {                                                                \
-        memcpy((dst) + _h->len, (src), _n);                               \
-        _h->len += _n;                                                    \
-        (dst)[_h->len] = '\0';                                            \
-    }                                                                     \
-} while (0)
-
-
-#define ss_append_lit(dst, lit)                                           \
-do {                                                                      \
-    SA_Header *_h = sa_hdr(dst);                                          \
-    size_t _n = sizeof(lit) - 1;                                          \
-                                                                          \
-    if (_h->len + _n + 1 > _h->cap) {                                     \
-        sa_overflow_abort(sa_cap(dst));                                   \
-    }                                                                     \
-    else {                                                                \
-        memcpy((dst) + _h->len, (lit), _n);                               \
-        _h->len += _n;                                                    \
-        (dst)[_h->len] = '\0';                                            \
-    }                                                                     \
-} while (0)
-
-
-/*
-===============================================================================
-Formatted append
-===============================================================================
-*/
-
-#define ss_appendf(dst, fmt, ...)                                         \
-do {                                                                      \
-    SA_Header *_h = sa_hdr(dst);                                          \
-    int _needed = snprintf(NULL, 0, fmt __VA_OPT__(,) __VA_ARGS__);       \
-                                                                          \
-    if (_needed < 0) {                                                    \
-        sa_overflow_abort(sa_cap(dst));                                   \
-    }                                                                     \
-    else {                                                                \
-        size_t _n = (size_t)_needed;                                      \
-                                                                          \
-        if (_h->len + _n + 1 > _h->cap) {                                 \
-            sa_overflow_abort(sa_cap(dst));                               \
-        }                                                                 \
-        else {                                                            \
-            snprintf((dst) + _h->len, _h->cap - _h->len,                  \
-                     fmt __VA_OPT__(,) __VA_ARGS__);                      \
-            _h->len += _n;                                                \
-        }                                                                 \
-    }                                                                     \
-} while (0)
-
-#define ss_sprintf(dst, fmt, ...)                                         \
-do {                                                                      \
-    SA_Header *_h = sa_hdr(dst);                                          \
-    int _needed = snprintf(NULL, 0, fmt __VA_OPT__(,) __VA_ARGS__);       \
-                                                                          \
-    if (_needed < 0) {                                                    \
-        sa_overflow_abort(sa_cap(dst));                                   \
-    }                                                                     \
-    else {                                                                \
-        size_t _n = (size_t)_needed;                                      \
-                                                                          \
-        if (_n + 1 > _h->cap) {                                           \
-            sa_overflow_abort(sa_cap(dst));                               \
-        }                                                                 \
-        else {                                                            \
-            snprintf((dst), _h->cap, fmt __VA_OPT__(,) __VA_ARGS__);      \
-            _h->len = _n;                                                 \
-        }                                                                 \
-    }                                                                     \
-} while (0)
-
-/*
-===============================================================================
-Character push
-===============================================================================
-*/
-
-#define ss_pushc(str, c)                                                  \
-do {                                                                      \
-    SA_Header *_h = sa_hdr(str);                                          \
-                                                                          \
-    if (_h->len + 2 > _h->cap) {                                          \
-        sa_overflow_abort(_h->cap);                                       \
-    }                                                                     \
-    else {                                                                \
-        (str)[_h->len++] = (c);                                           \
-        (str)[_h->len] = '\0';                                            \
-    }                                                                     \
-} while (0)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+void ss_clear(char *str);
+void ss_append_n(char *dst, const char *src, size_t n);
+void ss_append(char *dst, const char *src);
+void ss_pushc(char *str, char c);
+void ss_appendf(char *dst, const char *fmt, ...);
+void ss_sprintf(char *dst, const char *fmt, ...);
+
 
 typedef void (*sa_error_overflow_fn)(size_t);
 typedef void (*sa_error_underflow_fn)(void);
@@ -276,7 +160,6 @@ typedef void (*sa_error_underflow_fn)(void);
     to abort or otherwise not return. If a handler returns, the value
     produced by the expression is unspecified and must not be relied on.
 */
-
 // capacity/bounds violations on upper extent
 void sa_overflow_abort(size_t);
 // empty-stack access violations

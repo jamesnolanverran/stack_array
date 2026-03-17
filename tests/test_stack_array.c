@@ -259,18 +259,13 @@ static void test_ss_basic_operations(void)
     ASSERT_SIZE_EQ(ss_len(str), strlen(str));
 }
 
-static void test_ss_append_n_and_lit(void)
+static void test_ss_append_n(void)
 {
     stack_string(str, 32);
 
     ss_append_n(str, "helloXXX", 5);
     ASSERT_STREQ(str, "hello");
     ASSERT_SIZE_EQ(ss_len(str), 5);
-    ASSERT_SIZE_EQ(ss_len(str), strlen(str));
-
-    ss_append_lit(str, " literal");
-    ASSERT_STREQ(str, "hello literal");
-    ASSERT_SIZE_EQ(ss_len(str), strlen("hello literal"));
     ASSERT_SIZE_EQ(ss_len(str), strlen(str));
 }
 
@@ -372,23 +367,6 @@ static void test_ss_append_n_overflow_does_not_mutate(void)
 
     enable_test_handlers();
     EXPECT_FAIL(ss_append_n(str, "vwxyz", 5));
-    disable_test_handlers();
-
-    ASSERT_STREQ(str, "abc");
-    ASSERT_SIZE_EQ(ss_len(str), 3);
-    ASSERT_SIZE_EQ(ss_len(str), strlen(str));
-}
-
-static void test_ss_append_lit_overflow_does_not_mutate(void)
-{
-    stack_string(str, 8);
-
-    ss_append(str, "abc");
-    ASSERT_STREQ(str, "abc");
-    ASSERT_SIZE_EQ(ss_len(str), 3);
-
-    enable_test_handlers();
-    EXPECT_FAIL(ss_append_lit(str, "defgh"));
     disable_test_handlers();
 
     ASSERT_STREQ(str, "abc");
@@ -522,14 +500,13 @@ int stack_array_run_tests(void)
     RUN_TEST(test_sa_field_init_and_use);
 
     RUN_TEST(test_ss_basic_operations);
-    RUN_TEST(test_ss_append_n_and_lit);
+    RUN_TEST(test_ss_append_n);
     RUN_TEST(test_ss_appendf_success);
     RUN_TEST(test_ss_sprintf_success);
     RUN_TEST(test_ss_exact_fill_boundaries);
     RUN_TEST(test_ss_sprintf_full_and_overflow);
     RUN_TEST(test_ss_append_overflow_does_not_mutate);
     RUN_TEST(test_ss_append_n_overflow_does_not_mutate);
-    RUN_TEST(test_ss_append_lit_overflow_does_not_mutate);
     RUN_TEST(test_ss_pushc_overflow_does_not_mutate);
     RUN_TEST(test_ss_field_init_and_use);
 

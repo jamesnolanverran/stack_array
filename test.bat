@@ -97,7 +97,7 @@ exit /b 1
 
 :build_msvc
 echo [test] Using compiler: %CC% ^(MSVC-style^)
-"%CC%" /nologo /std:c11 /W4 /I. %SRC% /Fe:"%OUTBIN%"
+"%CC%" /nologo /std:c11 /W4 /I. /Fo"%OUTDIR%\\" %SRC% /Fe:"%OUTBIN%"
 exit /b %ERRORLEVEL%
 
 :build_gnu
