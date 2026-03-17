@@ -1,6 +1,6 @@
 # stack_array
 
-`stack_array` is a small C header/source pair for fixed-capacity arrays and strings that live on the stack.
+`stack_array` is a small C library for fixed-capacity arrays and strings that live on the stack.
 
 The goal is to remove some of the repetitive, error-prone parts of normal C code. Length and capacity are tracked for you, bounds are checked, and string helpers keep the buffer null-terminated.
 
