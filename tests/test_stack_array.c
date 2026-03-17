@@ -399,21 +399,28 @@ static void test_ss_field_init_and_use(void)
     };
 
     struct Label label = {0};
-    label.age = 20;
+    struct Label* l = &label;
+    char* name = label.name;
 
-    label.name[0] = '\0';
+    label.age = 20;
 
     enable_test_handlers();
     EXPECT_FAIL(ss_append(label.name, "hi"));
     disable_test_handlers();
 
     ss_field_init(label.name);
+    // ss_field_init(l->name); // also works
+    // ss_field_init(name);    // does not work: field_init requires the actual field expression
 
     ASSERT_SIZE_EQ(ss_len(label.name), 0);
     ASSERT_SIZE_EQ(ss_cap(label.name), 32);
 
-    ss_append(label.name, "hi - field initialized");
-    ASSERT_STREQ(label.name, "hi - field initialized");
+    ss_append(label.name, "hi");
+    ss_append(l->name, " there");
+
+    ss_append(name, "!");
+
+    ASSERT_STREQ(label.name, "hi there!");
     ASSERT_SIZE_EQ(ss_len(label.name), strlen(label.name));
 }
 

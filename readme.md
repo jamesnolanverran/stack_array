@@ -116,13 +116,16 @@ void example(void) {
     struct Label label = {0};
 
     label.id = 7;
-    ss_field_init(label.name);
+    ss_field_init(label.name); // init required to set capacity
 
     ss_append(label.name, "player");
     ss_pushc(label.name, '_');
-    ss_appendf(label.name, "%d", label.id);
+
+    char *name = label.name; // derived pointer works normally after ss_field_init(...)
+    ss_appendf(name, "%d", label.id);
 }
 ```
+The field lives inside the struct, and after initialization it can be used through a normal pointer.
 
 ## API summary
 
