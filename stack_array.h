@@ -63,7 +63,7 @@ Stack array declaration
 #define stack_array(name, T, N)                              \
     struct SA_##name {                                       \
         SA_Header hdr;                                       \
-        size_t sa_offset##name;                              \
+        size_t sa_offset_##name;                              \
         T data[N];                                           \
     } SA_##name = { { (N), 0 }, 0, {0} };                    \
     T *name = SA_##name.data;                                \
@@ -84,7 +84,7 @@ Struct field helpers
 // inline fixed arrays
 #define sa_field(name, T, N)           \
     SA_Header hdr_##name;              \
-    size_t _sa_offset_storage_##name;  \
+    size_t sa_offset_##name;  \
     T name[N]
 
 #define sa_field_init(parent_type, obj, field)                    \
