@@ -125,9 +125,15 @@ static void sa_default_underflow(void)
     fprintf(stderr, "stack_array underflow\n");
     abort();
 }
+static void sa_default_invalid(void)
+{
+    fprintf(stderr, "stack_array invalid state (uninitialized (sa_field_init(...) is required) or corrupted)\n");
+    abort();
+}
 
 static sa_error_overflow_fn sa_overflow_handler = sa_default_overflow;
 static sa_error_underflow_fn sa_underflow_handler = sa_default_underflow;
+static sa_error_invalid_fn sa_invalid_handler = sa_default_invalid;
 
 sa_error_overflow_fn sa_set_overflow_handler(sa_error_overflow_fn handler)
 {
@@ -141,6 +147,17 @@ sa_error_underflow_fn sa_set_underflow_handler(sa_error_underflow_fn handler)
     sa_error_underflow_fn previous = sa_underflow_handler;
     sa_underflow_handler = handler ? handler : sa_default_underflow;
     return previous;
+}
+sa_error_invalid_fn sa_set_invalid_handler(sa_error_invalid_fn handler)
+{
+    sa_error_invalid_fn prev = sa_invalid_handler;
+    sa_invalid_handler = handler ? handler : sa_default_invalid;
+    return prev;
+}
+void sa_invalid_abort(void)
+{
+    /* MUST NOT CONTINUE */
+    sa_invalid_handler();
 }
 
 void sa_overflow_abort(size_t cap)

@@ -125,7 +125,7 @@ void example(void) {
     struct Label label = {0};
 
     label.id = 7;
-    ss_field_init(label.name); // init required to set capacity
+    ss_field_init(Label, label, label.name); // init required to set capacity
 
     ss_append(label.name, "player");
     ss_pushc(label.name, '_');
@@ -136,10 +136,24 @@ void example(void) {
 ```
 The field lives inside the struct, and after initialization it can be used through a normal pointer.
 
-## How it works
+## How it works (header lookup)
 
-- [Unnamed Struct Types, Anonymous Members, and how `stack_array` Works](docs/unnamed_structs.md)
-- [Hidden Metadata in Front of an Array](docs/hidden_metadata.md)
+Each array stores its header (cap, len) before the data. Because compilers may insert padding between the header and the data (due to alignment), we can’t assume a fixed layout.
+
+To solve this, we store the exact byte offset from the data pointer back to the header in the word immediately preceding the data:
+
+At initialization:
+
+- Compute offset = offsetof(data) - offsetof(header)
+- Store it just before data, encoded with a small tag for validation
+
+At runtime:
+
+- Read the stored value at (data - sizeof(size_t))
+- Decode the offset & validate
+- Compute header pointer: (char*)data - offset
+
+This avoids layout assumptions, works with arbitrary alignment, and keeps the API as a plain T*.
 
 ## API summary
 
@@ -226,7 +240,7 @@ struct Label {
 
 void example(void) {
     struct Label label = {0};
-    ss_field_init(label.name); // sets capacity
+    ss_field_init(Label, label, label.name); // sets capacity
 }
 ```
 ### 3. String capacity includes the trailing `'\0'`

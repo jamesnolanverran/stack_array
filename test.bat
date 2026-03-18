@@ -97,12 +97,12 @@ exit /b 1
 
 :build_msvc
 echo [test] Using compiler: %CC% ^(MSVC-style^)
-"%CC%" /nologo /std:c99 /W4 /I. /Fo"%OUTDIR%\\" %SRC% /Fe:"%OUTBIN%"
+"%CC%" /nologo /std:c11 /W4 /I. /Fo"%OUTDIR%\\" %SRC% /Fe:"%OUTBIN%"
 exit /b %ERRORLEVEL%
 
 :build_gnu
 echo [test] Using compiler: %CC% ^(GCC-style^)
-"%CC%" -std=c99 -Wall -Wextra -pedantic -I. %SRC% -o "%OUTBIN%"
+"%CC%" -std=c11 -Wall -Wextra -pedantic -I. %SRC% -o "%OUTBIN%"
 exit /b %ERRORLEVEL%
 
 :usage

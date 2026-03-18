@@ -15,8 +15,39 @@ typedef struct SA_Header {
 Internal helpers
 ===============================================================================
 */
+#if !defined(SA_DEBUG) && !defined(NDEBUG)
+    #define SA_DEBUG
+#endif
 
-#define sa_hdr(arr) (((SA_Header *)(arr)) - 1)
+#define SA_TAG 0xA5A5
+void sa_invalid_abort(void);
+
+// offset must be initialized via stack_array or sa_field_init before use
+static inline size_t sa__get_offset(void *arr) {
+    size_t raw = *((size_t *)arr - 1);
+    // sanity check - catch uninitialized offset
+        if ((raw & 0xFFFF) != SA_TAG) {
+            sa_invalid_abort();
+        }
+    size_t off = raw >> 16;
+        if (off < sizeof(SA_Header)) {
+            sa_invalid_abort();
+        }
+    return off;
+}
+// static inline size_t sa__get_offset(void *arr) {
+//     size_t raw = *((size_t *)arr - 1);
+//     size_t off = raw ^ SA_OFFSET_TAG;
+//     #if defined(SA_DEBUG)
+//         /* basic sanity: offset must be non-zero and reasonably small */
+//         if (off < sizeof(SA_Header) || off > 1024) {
+//             sa_invalid_abort();
+//         }
+//     #endif
+//     return off;
+// }
+
+#define sa_hdr(arr) ((SA_Header *)((char *)(arr) - sa__get_offset(arr)))
 #define sa_len(arr) (sa_hdr((arr))->len)
 #define sa_cap(arr) (sa_hdr((arr))->cap)
 
@@ -29,12 +60,21 @@ Stack array declaration
 ===============================================================================
 */
 
-#define stack_array(name, T, N)                     \
-    struct {                                        \
-        SA_Header hdr;                              \
-        T data[N];                                  \
-    } SA_##name = { { (N), 0 }, {0} };              \
-    T *name = SA_##name.data
+#define stack_array(name, T, N)                              \
+    struct SA_##name {                                       \
+        SA_Header hdr;                                       \
+        size_t sa_offset##name;                              \
+        T data[N];                                           \
+    } SA_##name = { { (N), 0 }, 0, {0} };                    \
+    T *name = SA_##name.data;                                \
+    do {                                                     \
+        size_t _off =                                        \
+            offsetof(struct SA_##name, data) -               \
+            offsetof(struct SA_##name, hdr);                 \
+                                                             \
+        *((size_t *)name - 1) =                              \
+            (((size_t)_off << 16) | (size_t)SA_TAG);         \
+    } while (0)
 
 /*
 ===============================================================================
@@ -42,18 +82,26 @@ Struct field helpers
 ===============================================================================
 */
 // inline fixed arrays
-#define sa_field(name, T, N)    \
-    SA_Header hdr_##name;       \
+#define sa_field(name, T, N)           \
+    SA_Header hdr_##name;              \
+    size_t _sa_offset_storage_##name;  \
     T name[N]
 
-
-#define sa_field_init(arr)                              \
-    do {                                                \
-        SA_Header *_h = sa_hdr(arr);                    \
-        _h->cap = sizeof(arr) / sizeof((arr)[0]);       \
-        _h->len = 0;                                    \
+#define sa_field_init(parent_type, obj, field)                    \
+    do {                                                          \
+        size_t _off =                                             \
+            offsetof(parent_type, field) -                        \
+            offsetof(parent_type, hdr_##field);                   \
+                                                                  \
+        *((size_t *)((obj).field) - 1) =                          \
+            (((size_t)_off << 16) | (size_t)SA_TAG);              \
+                                                                  \
+        SA_Header *_h =                                           \
+            (SA_Header *)((char *)((obj).field) - _off);          \
+                                                                  \
+        _h->cap = sizeof((obj).field) / sizeof((obj).field[0]);   \
+        _h->len = 0;                                              \
     } while (0)
-
 
 /*
 ===============================================================================
@@ -121,7 +169,7 @@ String stack arrays
 #define stack_string(name, N) stack_array(name, char, N)
 
 #define ss_field(name, N) sa_field(name, char, N)
-#define ss_field_init(arr) sa_field_init(arr)
+#define ss_field_init(parent_type, obj, field) sa_field_init(parent_type, obj, field)
 
 #define ss_hdr(str) sa_hdr(str)
 #define ss_len(str) sa_len(str)
@@ -145,6 +193,7 @@ void ss_sprintf(char *dst, const char *fmt, ...);
 
 typedef void (*sa_error_overflow_fn)(size_t);
 typedef void (*sa_error_underflow_fn)(void);
+typedef void (*sa_error_invalid_fn)(void);
 
 /*
     sa_at, sa_peek, and sa_pop are expression-style checked access macros.
@@ -157,9 +206,11 @@ typedef void (*sa_error_underflow_fn)(void);
 void sa_overflow_abort(size_t);
 // empty-stack access violations
 void sa_underflow_abort(void);
+void sa_invalid_abort(void);
 
 sa_error_overflow_fn sa_set_overflow_handler(sa_error_overflow_fn handler);
 sa_error_underflow_fn sa_set_underflow_handler(sa_error_underflow_fn handler);
+sa_error_invalid_fn sa_set_invalid_handler(sa_error_invalid_fn handler);
 
 #ifdef __cplusplus
 }

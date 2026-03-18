@@ -7,11 +7,17 @@
 
 static sa_error_overflow_fn saved_overflow_handler = NULL;
 static sa_error_underflow_fn saved_underflow_handler = NULL;
+static sa_error_invalid_fn saved_invalid_handler = NULL;
+
 static int handlers_enabled = 0;
 
 static void test_overflow_handler(size_t cap)
 {
     (void)cap;
+    tf_expected_error = 1;
+}
+static void test_invalid_handler(void)
+{
     tf_expected_error = 1;
 }
 
@@ -28,6 +34,8 @@ static void enable_test_handlers(void)
 
     saved_overflow_handler = sa_set_overflow_handler(test_overflow_handler);
     saved_underflow_handler = sa_set_underflow_handler(test_underflow_handler);
+    saved_invalid_handler = sa_set_invalid_handler(test_invalid_handler);
+
     handlers_enabled = 1;
 }
 
@@ -39,6 +47,7 @@ static void disable_test_handlers(void)
 
     sa_set_overflow_handler(saved_overflow_handler);
     sa_set_underflow_handler(saved_underflow_handler);
+    sa_set_invalid_handler(saved_invalid_handler);
 
     saved_overflow_handler = NULL;
     saved_underflow_handler = NULL;
@@ -208,11 +217,7 @@ static void test_sa_field_init_and_use(void)
 
     holder.values[0] = 77; /* defined fallback read */
 
-    enable_test_handlers();
-    EXPECT_FAIL((void)sa_push(holder.values, 11));
-    disable_test_handlers();
-
-    sa_field_init(holder.values);
+    sa_field_init(struct FieldHolder, holder, values);
 
     ASSERT_SIZE_EQ(sa_len(holder.values), 0);
     ASSERT_SIZE_EQ(sa_cap(holder.values), 3);
@@ -223,6 +228,19 @@ static void test_sa_field_init_and_use(void)
     ASSERT_SIZE_EQ(sa_len(holder.values), 2);
     ASSERT_EQ(sa_at(holder.values, 0), 11);
     ASSERT_EQ(sa_at(holder.values, 1), 22);
+}
+
+static void test_sa_len_long_double_alignment(void)
+{
+    stack_array(values, long double, 2);
+
+    ASSERT_SIZE_EQ(sa_cap(values), 2);
+    ASSERT_SIZE_EQ(sa_len(values), 0);
+
+    sa_push(values, 2.0L);
+    ASSERT_SIZE_EQ(sa_len(values), 1);
+    ASSERT_TRUE(values[0] == 2.0L);
+    ASSERT_TRUE(sa_at(values, 0) == 2.0L);
 }
 
 /*
@@ -390,6 +408,16 @@ static void test_ss_pushc_overflow_does_not_mutate(void)
     ASSERT_SIZE_EQ(ss_len(str), 3);
     ASSERT_SIZE_EQ(ss_len(str), strlen(str));
 }
+static void test_sa_field_uninitialized_hdr(void)
+{
+    struct FieldHolder {
+        sa_field(values, int, 3);
+    };
+    struct FieldHolder holder = {0};
+    enable_test_handlers();
+    EXPECT_FAIL((void)sa_len(holder.values));
+    disable_test_handlers();
+}
 
 static void test_ss_field_init_and_use(void)
 {
@@ -404,13 +432,8 @@ static void test_ss_field_init_and_use(void)
 
     label.age = 20;
 
-    enable_test_handlers();
-    EXPECT_FAIL(ss_append(label.name, "hi"));
-    disable_test_handlers();
-
-    ss_field_init(label.name);
-    // ss_field_init(l->name); // also works
-    // ss_field_init(name);    // does not work: field_init requires the actual field expression
+    ss_field_init(struct Label, label, name);
+    // ss_field_init(struct Label, label, l->name); // also works
 
     ASSERT_SIZE_EQ(ss_len(label.name), 0);
     ASSERT_SIZE_EQ(ss_cap(label.name), 32);
@@ -505,6 +528,8 @@ int stack_array_run_tests(void)
     RUN_TEST(test_sa_underflow_paths);
     RUN_TEST(test_sa_at_out_of_bounds);
     RUN_TEST(test_sa_field_init_and_use);
+    RUN_TEST(test_sa_len_long_double_alignment);
+    puts("");
 
     RUN_TEST(test_ss_basic_operations);
     RUN_TEST(test_ss_append_n);
@@ -515,6 +540,7 @@ int stack_array_run_tests(void)
     RUN_TEST(test_ss_append_overflow_does_not_mutate);
     RUN_TEST(test_ss_append_n_overflow_does_not_mutate);
     RUN_TEST(test_ss_pushc_overflow_does_not_mutate);
+    RUN_TEST(test_sa_field_uninitialized_hdr);
     RUN_TEST(test_ss_field_init_and_use);
 
     RUN_TEST(test_error_handler_setters_return_previous_and_restore);
