@@ -19,8 +19,15 @@ Internal helpers
     #define SA_DEBUG
 #endif
 
-#define SA_TAG 0xA5A5
+#if defined(__cplusplus)
+extern "C" {
+#endif
 void sa_invalid_abort(void);
+#if defined(__cplusplus)
+}
+#endif
+
+#define SA_TAG 0xA5A5
 
 // offset must be initialized via stack_array or sa_field_init before use
 static inline size_t sa__get_offset(void *arr) {
@@ -35,17 +42,6 @@ static inline size_t sa__get_offset(void *arr) {
         }
     return off;
 }
-// static inline size_t sa__get_offset(void *arr) {
-//     size_t raw = *((size_t *)arr - 1);
-//     size_t off = raw ^ SA_OFFSET_TAG;
-//     #if defined(SA_DEBUG)
-//         /* basic sanity: offset must be non-zero and reasonably small */
-//         if (off < sizeof(SA_Header) || off > 1024) {
-//             sa_invalid_abort();
-//         }
-//     #endif
-//     return off;
-// }
 
 #define sa_hdr(arr) ((SA_Header *)((char *)(arr) - sa__get_offset(arr)))
 #define sa_len(arr) (sa_hdr((arr))->len)
@@ -206,7 +202,6 @@ typedef void (*sa_error_invalid_fn)(void);
 void sa_overflow_abort(size_t);
 // empty-stack access violations
 void sa_underflow_abort(void);
-void sa_invalid_abort(void);
 
 sa_error_overflow_fn sa_set_overflow_handler(sa_error_overflow_fn handler);
 sa_error_underflow_fn sa_set_underflow_handler(sa_error_underflow_fn handler);
