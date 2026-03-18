@@ -109,6 +109,9 @@ Core operations
     On error they call the installed handler. These handlers are intended
     to abort or otherwise not return. If a handler returns, the value
     produced by the expression is unspecified and must not be relied on.
+
+    note: these macros take simple l-values 
+        they may evaluate more than once
 */
 
 // Pushes val and returns a pointer to the inserted element.
@@ -147,7 +150,7 @@ do {                                                                      \
     size_t _n = (count);                                                  \
                                                                           \
     if (_n > _h->cap - _h->len) {                                         \
-        sa_overflow_abort(sa_cap(dst));                                   \
+        sa_overflow_abort(_h->cap);                                   \
     }                                                                     \
     else {                                                                \
         memcpy((dst) + _h->len, (src), sizeof((dst)[0]) * _n);            \

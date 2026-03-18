@@ -125,7 +125,7 @@ void example(void) {
     struct Label label = {0};
 
     label.id = 7;
-    ss_field_init(Label, label, label.name); // init required to set capacity
+    ss_field_init(Label, label, name); // init required to set capacity
 
     ss_append(label.name, "player");
     ss_pushc(label.name, '_');
@@ -240,7 +240,7 @@ struct Label {
 
 void example(void) {
     struct Label label = {0};
-    ss_field_init(Label, label, label.name); // sets capacity
+    ss_field_init(Label, label, name); // sets capacity
 }
 ```
 ### 3. String capacity includes the trailing `'\0'`
