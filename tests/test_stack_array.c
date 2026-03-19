@@ -51,7 +51,56 @@ static void disable_test_handlers(void)
 
     saved_overflow_handler = NULL;
     saved_underflow_handler = NULL;
+    saved_invalid_handler = NULL;
     handlers_enabled = 0;
+}
+
+#define SA_ASSERT_STACK_ARRAY_METADATA(name)                                      \
+    sa_assert_stack_array_metadata_impl(                                          \
+        (name),                                                                  \
+        SA_##name.sa_meta_##name,                                                \
+        sizeof(SA_##name.sa_meta_##name),                                        \
+        offsetof(struct SA_##name, data) - offsetof(struct SA_##name, hdr))
+
+static void sa_assert_stack_array_metadata_impl(
+    void *arr,
+    unsigned char *meta,
+    size_t meta_size,
+    size_t expected_offset)
+{
+    unsigned char *meta_end = meta + meta_size;
+    size_t *guard_ptr = (size_t *)(meta_end - sizeof(size_t));
+    size_t stored_guard = *guard_ptr;
+    size_t stored_offset = *(guard_ptr - 1);
+
+    ASSERT_TRUE(meta_end == (unsigned char *)arr);
+    ASSERT_SIZE_EQ(sa__get_offset(arr), stored_offset);
+    ASSERT_SIZE_EQ(stored_offset, expected_offset);
+    ASSERT_SIZE_EQ(stored_guard, SA_META_GUARD);
+}
+
+#define SA_ASSERT_FIELD_METADATA(parent_type, obj, field)                         \
+    sa_assert_field_metadata_impl(                                                \
+        (unsigned char *)(obj).sa_meta_##field,                                   \
+        sizeof(((parent_type *)0)->sa_meta_##field),                              \
+        (obj).field,                                                              \
+        offsetof(parent_type, field) - offsetof(parent_type, hdr_##field))
+
+static void sa_assert_field_metadata_impl(
+    unsigned char *meta,
+    size_t meta_size,
+    void *field_ptr,
+    size_t expected_offset)
+{
+    unsigned char *meta_end = meta + meta_size;
+    size_t *guard_ptr = (size_t *)(meta_end - sizeof(size_t));
+    size_t stored_guard = *guard_ptr;
+    size_t stored_offset = *(guard_ptr - 1);
+
+    ASSERT_TRUE(meta_end == (unsigned char *)field_ptr);
+    ASSERT_SIZE_EQ(sa__get_offset(field_ptr), stored_offset);
+    ASSERT_SIZE_EQ(stored_offset, expected_offset);
+    ASSERT_SIZE_EQ(stored_guard, SA_META_GUARD);
 }
 
 /*
@@ -241,6 +290,52 @@ static void test_sa_len_long_double_alignment(void)
     ASSERT_SIZE_EQ(sa_len(values), 1);
     ASSERT_TRUE(values[0] == 2.0L);
     ASSERT_TRUE(sa_at(values, 0) == 2.0L);
+}
+
+#define DECLARE_ALIGNED_TYPE(name, ALIGN)                                       \
+    typedef struct {                                                            \
+        SA_ALIGNAS(ALIGN) char content[ALIGN];                                  \
+    } name
+
+static void test_sa_high_alignment_metadata(void)
+{
+    DECLARE_ALIGNED_TYPE(Aligned16, 16);
+    stack_array(values16, Aligned16, 4);
+    SA_ASSERT_STACK_ARRAY_METADATA(values16);
+
+    DECLARE_ALIGNED_TYPE(Aligned32, 32);
+    stack_array(values32, Aligned32, 4);
+    SA_ASSERT_STACK_ARRAY_METADATA(values32);
+
+    DECLARE_ALIGNED_TYPE(Aligned64, 64);
+    stack_array(values64, Aligned64, 3);
+    SA_ASSERT_STACK_ARRAY_METADATA(values64);
+
+    DECLARE_ALIGNED_TYPE(Aligned128, 128);
+    stack_array(values128, Aligned128, 2);
+    SA_ASSERT_STACK_ARRAY_METADATA(values128);
+
+    DECLARE_ALIGNED_TYPE(Aligned256, 256);
+    stack_array(values256, Aligned256, 2);
+    SA_ASSERT_STACK_ARRAY_METADATA(values256);
+
+    DECLARE_ALIGNED_TYPE(Aligned4096, 4096);
+    stack_array(values4096, Aligned4096, 1);
+    SA_ASSERT_STACK_ARRAY_METADATA(values4096);
+}
+
+static void test_sa_field_high_alignment_metadata(void)
+{
+    DECLARE_ALIGNED_TYPE(FieldAligned128, 128);
+
+    struct FieldHolder {
+        int tag;
+        sa_field(values, FieldAligned128, 3);
+    };
+
+    struct FieldHolder holder = {0};
+    sa_field_init(struct FieldHolder, holder, values);
+    SA_ASSERT_FIELD_METADATA(struct FieldHolder, holder, values);
 }
 
 /*
@@ -529,6 +624,8 @@ int stack_array_run_tests(void)
     RUN_TEST(test_sa_at_out_of_bounds);
     RUN_TEST(test_sa_field_init_and_use);
     RUN_TEST(test_sa_len_long_double_alignment);
+    RUN_TEST(test_sa_high_alignment_metadata);
+    RUN_TEST(test_sa_field_high_alignment_metadata);
     puts("");
 
     RUN_TEST(test_ss_basic_operations);
