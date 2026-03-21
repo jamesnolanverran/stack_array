@@ -1,8 +1,12 @@
 # stack_array
 
-`stack_array` is a small C helper library for fixed-capacity arrays and strings that live on the stack.
+`stack_array` is a small C helper library for fixed-capacity arrays and strings with inline storage and tracked length.
 
 The goal is to remove some of the repetitive, error-prone parts of normal C code. Length and capacity are tracked for you, bounds are checked, and string helpers keep the buffer null-terminated.
+
+It is mainly a small bookkeeping layer for fixed-capacity data. You can use it as-is, or as a base for your own small helpers.
+
+The win is small but real: less friction at call sites and in function signatures, especially when these arrays and strings are fields inside larger structs.
 
 ## What it provides
 
@@ -13,32 +17,94 @@ The goal is to remove some of the repetitive, error-prone parts of normal C code
 - ss_appendf and ss_sprintf for strings
 - optional custom overflow / underflow handlers
 
-This is not a heap-backed dynamic array. Capacity is fixed at declaration time.
+(Note: This is not a heap-backed dynamic array. Capacity is fixed at declaration time.)
 
-## Why use it
+## Why use it?
 
-Stack_array:
+`stack_array` reduces some of the friction of working with fixed-capacity buffers in C. Two common alternatives are plain C, or a small container that points at a separate fixed buffer.
 
-```c
-stack_string(build_path, 512); 
-ss_sprintf(build_path, "build/%s", rel_path);
-```
+### 1. Plain C
 
-Raw C:
+With plain C, you keep the buffer, current length, and capacity in sync yourself.
 
 ```c
-char build_path[512];
-int needed = snprintf(NULL, 0, "build/%s", rel_path);
+char name[32];
+size_t len = 0;
+size_t cap = sizeof(name);
 
-if (needed < 0 || (size_t)needed >= sizeof(build_path)) {
-    fprintf(stderr, "error msg\n");
+const char *src = "abc";
+size_t n = strlen(src);
+
+if (n > cap - len - 1) {
+    fprintf(stderr, "overflow\n");
     abort();
 }
-snprintf(build_path, sizeof(build_path), "build/%s", rel_path)
 
+memcpy(name + len, src, n);
+len += n;
+name[len] = '\0';
 ```
 
----
+This is simple and fully explicit. The downside is that every operation has to deal with len, cap, and bounds checks somehow.
+
+In real code, people usually write helpers for this, which leads to APIs like:
+
+```c
+void str_append_n(char *dst, size_t *len, size_t cap,
+                  const char *src, size_t n);
+```
+
+That works fine, but you end up passing the bookkeeping around everywhere.
+
+### 2. A container pointing at separate storage
+
+Another option is to keep the raw array and wrap it.
+
+```c
+char name_buf[32];  
+
+typedef struct {  
+    char *ptr;  
+    size_t len;  
+    size_t cap;  
+} Str;  
+  
+Str name = { name_buf, 0, sizeof(name_buf) };
+```
+
+Then your helpers operate on `Str *`:
+
+```c
+void str_append(Str *s, const char *src);
+```
+
+This is a good conventional design. It keeps `ptr`, `len`, and `cap` together, and it is a reasonable alternative to this library.
+
+The tradeoff is that the storage and the descriptor are now separate things. For locals that is usually fine. For embedded fields, one logical string often becomes “buffer plus wrapper,” which is a little more awkward.
+
+**It also means the wrapper type becomes part of the API.** For strings that may just be `Str *`, but other fixed-capacity arrays need their own container types as well.
+
+### 3. This library
+
+This library keeps the storage inline, but stores `len` and `cap` in hidden metadata immediately before the array.
+
+```c
+stack_string(name, 32);  
+  
+ss_append(name, "abc");  
+ss_pushc(name, '!');
+```
+
+You work with the data directly, so helpers and other functions take `name`, not `name.ptr` or a wrapper type.
+
+The helpers can still recover the current length and capacity from that pointer, so you do not have to pass them separately.
+
+Compared to plain C, this avoids threading `len` and `cap` through every helper.
+
+Compared to a separate wrapper like `struct { ptr, len, cap }`, this avoids keeping a second object paired with the buffer and keeps wrapper type names out of function signatures.
+
+This is particularly useful when these arrays or strings are fields inside larger structs.
+
 ## Example: stack array of ints
 
 ```c
