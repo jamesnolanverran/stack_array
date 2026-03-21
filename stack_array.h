@@ -26,24 +26,26 @@
 #define SA_MAX(a, b) ((a) > (b) ? (a) : (b))
 #define SA_ROUND_UP(x, a) ((((x) + (a) - 1) / (a)) * (a))
 
+#if !defined(SA_DEBUG) && !defined(NDEBUG)
+    #define SA_DEBUG
+#endif
+
 #define SA_META_GUARD ((size_t)0xA5A5A5A5A5A5A5A5ULL)
-#define SA_META_WORDS 2
+#define SA_META_DATA_WORDS 2
+#if defined(SA_DEBUG)
+    #define SA_META_GUARD_WORDS 1
+#else
+    #define SA_META_GUARD_WORDS 0
+#endif
+#define SA_META_WORDS (SA_META_DATA_WORDS + SA_META_GUARD_WORDS)
 #define SA_META_ALIGN(T) SA_MAX(SA_ALIGNOF(size_t), SA_ALIGNOF(T))
-#define SA_META_SIZE(T) SA_ROUND_UP(sizeof(size_t) * SA_META_WORDS, SA_META_ALIGN(T))
+#define SA_META_INFO_SIZE (sizeof(size_t) * SA_META_WORDS)
+#define SA_META_STORAGE_SIZE(T) SA_ROUND_UP(SA_META_INFO_SIZE, SA_META_ALIGN(T))
 
 typedef struct SA_Header {
     size_t cap;
     size_t len;
 } SA_Header;
-
-/*
-===============================================================================
-Internal helpers
-===============================================================================
-*/
-#if !defined(SA_DEBUG) && !defined(NDEBUG)
-    #define SA_DEBUG
-#endif
 
 #if defined(__cplusplus)
 extern "C" {
@@ -79,24 +81,47 @@ static inline int sa__is_size_t_aligned(const void *ptr)
     }
 #endif
 
-// offset must be initialized via stack_array or sa_field_init before use
-static inline size_t sa__get_offset(void *arr) {
+#if defined(SA_DEBUG)
+static inline size_t *sa__guard_ptr(void *arr)
+{
     unsigned char *data = (unsigned char *)arr;
-    size_t *guard_ptr = (size_t *)(data - sizeof(size_t));
+    size_t *guard_ptr = (size_t *)(data - sizeof(SA_Header) - sizeof(size_t));
     sa__assert_size_t_aligned(guard_ptr);
-    size_t guard = *guard_ptr;
-    if (guard != SA_META_GUARD) {
-        sa_invalid_abort();
-    }
-    size_t *off_ptr = guard_ptr - 1;
-    size_t off = *off_ptr;
-    if (off < sizeof(SA_Header)) {
-        sa_invalid_abort();
-    }
-    return off;
+    return guard_ptr;
+}
+#endif
+
+static inline SA_Header *sa__raw_header(void *arr)
+{
+    unsigned char *data = (unsigned char *)arr;
+    SA_Header *hdr = (SA_Header *)(data - sizeof(SA_Header));
+    sa__assert_size_t_aligned(hdr);
+    return hdr;
 }
 
-#define sa_hdr(arr) ((SA_Header *)((char *)(arr) - sa__get_offset(arr)))
+static inline void sa__init_metadata(void *arr, size_t cap)
+{
+#if defined(SA_DEBUG)
+    size_t *guard_ptr = sa__guard_ptr(arr);
+    *guard_ptr = SA_META_GUARD;
+#endif
+    SA_Header *hdr = sa__raw_header(arr);
+    hdr->cap = cap;
+    hdr->len = 0;
+}
+
+static inline SA_Header *sa__get_header(void *arr)
+{
+#if defined(SA_DEBUG)
+    size_t *guard_ptr = sa__guard_ptr(arr);
+    if (*guard_ptr != SA_META_GUARD) {
+        sa_invalid_abort();
+    }
+#endif
+    return sa__raw_header(arr);
+}
+
+#define sa_hdr(arr) (sa__get_header((arr)))
 #define sa_len(arr) (sa_hdr((arr))->len)
 #define sa_cap(arr) (sa_hdr((arr))->cap)
 
@@ -107,28 +132,23 @@ static inline size_t sa__get_offset(void *arr) {
 ===============================================================================
 Stack array declaration
 ===============================================================================
+
+struct {
+    unsigned char sa_meta[metadata_size + padding]
+    T data[N]
+} = T *name = SA_name.data;
+
 */
 
-#define stack_array(name, T, N)                                              \
-    struct SA_##name {                                                       \
-        SA_Header hdr;                                                       \
-        SA_ALIGNAS(SA_META_ALIGN(T)) unsigned char sa_meta_##name[SA_META_SIZE(T)]; \
-        T data[N];                                                           \
-    } SA_##name = {0};                                                       \
-    T *name = SA_##name.data;                                                \
-    do {                                                                     \
-        SA_##name.hdr.cap = (N);                                             \
-        SA_##name.hdr.len = 0;                                               \
-        size_t _off =                                                        \
-            offsetof(struct SA_##name, data) -                               \
-            offsetof(struct SA_##name, hdr);                                 \
-        unsigned char *_meta_end =                                           \
-            SA_##name.sa_meta_##name + SA_META_SIZE(T);                      \
-        size_t *_guard_ptr = (size_t *)(_meta_end - sizeof(size_t));         \
-        sa__assert_size_t_aligned(_guard_ptr);                               \
-        size_t *_off_ptr = _guard_ptr - 1;                                   \
-        *_guard_ptr = SA_META_GUARD;                                         \
-        *_off_ptr = _off;                                                    \
+
+#define stack_array(name, T, N)                                                             \
+    struct {                                                                                \
+        SA_ALIGNAS(SA_META_ALIGN(T)) unsigned char sa_meta_##name[SA_META_STORAGE_SIZE(T)]; \
+        T data[N];                                                                          \
+    } SA_##name = {0};                                                                      \
+    T *name = SA_##name.data;                                                               \
+    do {                                                                                    \
+        sa__init_metadata(SA_##name.data, (N));                                             \
     } while (0)
 
 /*
@@ -137,29 +157,15 @@ Struct field helpers
 ===============================================================================
 */
 // inline fixed arrays
-#define sa_field(name, T, N)                                               \
-    SA_Header hdr_##name;                                                  \
-    SA_ALIGNAS(SA_META_ALIGN(T)) unsigned char sa_meta_##name[SA_META_SIZE(T)]; \
+#define sa_field(name, T, N)                                                            \
+    SA_ALIGNAS(SA_META_ALIGN(T)) unsigned char sa_meta_##name[SA_META_STORAGE_SIZE(T)]; \
     T name[N]
 
-#define sa_field_init(parent_type, obj, field)                    \
-    do {                                                          \
-        size_t _off =                                             \
-            offsetof(parent_type, field) -                        \
-            offsetof(parent_type, hdr_##field);                   \
-        unsigned char *_meta = (unsigned char *)(obj).sa_meta_##field;      \
-        size_t _meta_size = sizeof(((parent_type *)0)->sa_meta_##field);    \
-        unsigned char *_meta_end = _meta + _meta_size;                      \
-        size_t *_guard_ptr = (size_t *)(_meta_end - sizeof(size_t));        \
-        sa__assert_size_t_aligned(_guard_ptr);                              \
-        size_t *_off_ptr = _guard_ptr - 1;                                  \
-        *_guard_ptr = SA_META_GUARD;                                        \
-        *_off_ptr = _off;                                                   \
-        SA_Header *_h =                                           \
-            (SA_Header *)((char *)((obj).field) - _off);          \
-                                                                  \
-        _h->cap = sizeof((obj).field) / sizeof((obj).field[0]);   \
-        _h->len = 0;                                              \
+#define sa_field_init(obj, field)                                           \
+    do {                                                                    \
+        void *_sa_field_ptr = (obj).field;                                  \
+        size_t _cap = sizeof((obj).field) / sizeof((obj).field[0]);         \
+        sa__init_metadata(_sa_field_ptr, _cap);                             \
     } while (0)
 
 /*
@@ -213,7 +219,7 @@ do {                                                                      \
     size_t _n = (count);                                                  \
                                                                           \
     if (_n > _h->cap - _h->len) {                                         \
-        sa_overflow_abort(_h->cap);                                   \
+        sa_overflow_abort(_h->cap);                                       \
     }                                                                     \
     else {                                                                \
         memcpy((dst) + _h->len, (src), sizeof((dst)[0]) * _n);            \
@@ -231,7 +237,7 @@ String stack arrays
 #define stack_string(name, N) stack_array(name, char, N)
 
 #define ss_field(name, N) sa_field(name, char, N)
-#define ss_field_init(parent_type, obj, field) sa_field_init(parent_type, obj, field)
+#define ss_field_init(obj, field) sa_field_init(obj, field)
 
 #define ss_hdr(str) sa_hdr(str)
 #define ss_len(str) sa_len(str)

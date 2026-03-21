@@ -57,26 +57,30 @@ static void disable_test_handlers(void)
 
 #define SA_ASSERT_STACK_ARRAY_METADATA(name)                                      \
     sa_assert_stack_array_metadata_impl(                                          \
-        (name),                                                                  \
-        SA_##name.sa_meta_##name,                                                \
-        sizeof(SA_##name.sa_meta_##name),                                        \
-        offsetof(struct SA_##name, data) - offsetof(struct SA_##name, hdr))
+        (name),                                                                   \
+        SA_##name.sa_meta_##name,                                                 \
+        sizeof(SA_##name.sa_meta_##name),                                         \
+        sizeof(SA_##name.data) / sizeof(SA_##name.data[0]))
 
 static void sa_assert_stack_array_metadata_impl(
     void *arr,
     unsigned char *meta,
     size_t meta_size,
-    size_t expected_offset)
+    size_t expected_cap)
 {
     unsigned char *meta_end = meta + meta_size;
-    size_t *guard_ptr = (size_t *)(meta_end - sizeof(size_t));
-    size_t stored_guard = *guard_ptr;
-    size_t stored_offset = *(guard_ptr - 1);
+    SA_Header *hdr = (SA_Header *)(meta_end - sizeof(SA_Header));
 
     ASSERT_TRUE(meta_end == (unsigned char *)arr);
-    ASSERT_SIZE_EQ(sa__get_offset(arr), stored_offset);
-    ASSERT_SIZE_EQ(stored_offset, expected_offset);
-    ASSERT_SIZE_EQ(stored_guard, SA_META_GUARD);
+    ASSERT_TRUE(sa__is_size_t_aligned(hdr));
+    ASSERT_SIZE_EQ(hdr->cap, expected_cap);
+    ASSERT_SIZE_EQ(hdr->len, 0);
+
+#if defined(SA_DEBUG)
+    size_t *guard_ptr = (size_t *)((unsigned char *)hdr - sizeof(size_t));
+    ASSERT_TRUE(sa__is_size_t_aligned(guard_ptr));
+    ASSERT_SIZE_EQ(*guard_ptr, SA_META_GUARD);
+#endif
 }
 
 #define SA_ASSERT_FIELD_METADATA(parent_type, obj, field)                         \
@@ -84,23 +88,27 @@ static void sa_assert_stack_array_metadata_impl(
         (unsigned char *)(obj).sa_meta_##field,                                   \
         sizeof(((parent_type *)0)->sa_meta_##field),                              \
         (obj).field,                                                              \
-        offsetof(parent_type, field) - offsetof(parent_type, hdr_##field))
+        sizeof((obj).field) / sizeof((obj).field[0]))
 
 static void sa_assert_field_metadata_impl(
     unsigned char *meta,
     size_t meta_size,
     void *field_ptr,
-    size_t expected_offset)
+    size_t expected_cap)
 {
     unsigned char *meta_end = meta + meta_size;
-    size_t *guard_ptr = (size_t *)(meta_end - sizeof(size_t));
-    size_t stored_guard = *guard_ptr;
-    size_t stored_offset = *(guard_ptr - 1);
+    SA_Header *hdr = (SA_Header *)(meta_end - sizeof(SA_Header));
 
     ASSERT_TRUE(meta_end == (unsigned char *)field_ptr);
-    ASSERT_SIZE_EQ(sa__get_offset(field_ptr), stored_offset);
-    ASSERT_SIZE_EQ(stored_offset, expected_offset);
-    ASSERT_SIZE_EQ(stored_guard, SA_META_GUARD);
+    ASSERT_TRUE(sa__is_size_t_aligned(hdr));
+    ASSERT_SIZE_EQ(hdr->cap, expected_cap);
+    ASSERT_SIZE_EQ(hdr->len, 0);
+
+#if defined(SA_DEBUG)
+    size_t *guard_ptr = (size_t *)((unsigned char *)hdr - sizeof(size_t));
+    ASSERT_TRUE(sa__is_size_t_aligned(guard_ptr));
+    ASSERT_SIZE_EQ(*guard_ptr, SA_META_GUARD);
+#endif
 }
 
 /*
@@ -266,7 +274,7 @@ static void test_sa_field_init_and_use(void)
 
     holder.values[0] = 77; /* defined fallback read */
 
-    sa_field_init(struct FieldHolder, holder, values);
+    sa_field_init(holder, values);
 
     ASSERT_SIZE_EQ(sa_len(holder.values), 0);
     ASSERT_SIZE_EQ(sa_cap(holder.values), 3);
@@ -334,7 +342,7 @@ static void test_sa_field_high_alignment_metadata(void)
     };
 
     struct FieldHolder holder = {0};
-    sa_field_init(struct FieldHolder, holder, values);
+    sa_field_init(holder, values);
     SA_ASSERT_FIELD_METADATA(struct FieldHolder, holder, values);
 }
 
@@ -527,8 +535,8 @@ static void test_ss_field_init_and_use(void)
 
     label.age = 20;
 
-    ss_field_init(struct Label, label, name);
-    // ss_field_init(struct Label, label, l->name); // also works
+    ss_field_init(label, name);
+    // ss_field_init(*l, name); // also works
 
     ASSERT_SIZE_EQ(ss_len(label.name), 0);
     ASSERT_SIZE_EQ(ss_cap(label.name), 32);
